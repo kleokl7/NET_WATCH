@@ -8,6 +8,7 @@ from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandle
 
 from database import init_db
 from summarizer import init_summarizer
+from fetcher import init_finnhub
 from handlers import start, news, button_handler, weights_command
 
 logging.basicConfig(
@@ -32,6 +33,13 @@ def main():
 
     logger.info("Initializing Gemini summarizer...")
     init_summarizer(gemini_api_key)
+
+    finnhub_api_key = os.environ.get("FINNHUB_API_KEY")
+    if finnhub_api_key:
+        init_finnhub(finnhub_api_key)
+        logger.info("Finnhub API enabled.")
+    else:
+        logger.info("No FINNHUB_API_KEY found — Finnhub disabled (RSS-only mode).")
 
     logger.info("Starting Telegram bot...")
     app = ApplicationBuilder().token(telegram_token).build()

@@ -3,25 +3,27 @@
 import logging
 import requests
 from bs4 import BeautifulSoup
-from config import HEADERS
+from config import HEADERS, MAX_SCRAPE_CHARS
 
 logger = logging.getLogger(__name__)
 
+_session = requests.Session()
+_session.headers.update(HEADERS)
+
 
 def scrape_article_text(url):
-    """Extracts main body text from an article URL. Returns empty string on failure."""
+    """Extract main body text from an article URL. Returns empty string on failure."""
     try:
-        resp = requests.get(url, headers=HEADERS, timeout=15)
+        resp = _session.get(url, timeout=10)
         resp.raise_for_status()
-        soup = BeautifulSoup(resp.content, 'html.parser')
+        soup = BeautifulSoup(resp.content, 'lxml')
 
-        # Remove non-content elements
-        for tag in soup(['script', 'style', 'nav', 'footer', 'header']):
+        for tag in soup(['script', 'style', 'nav', 'footer', 'header', 'aside', 'form']):
             tag.decompose()
 
         paragraphs = soup.find_all('p')
-        text = " ".join(p.get_text(strip=True) for p in paragraphs)
-        return text[:4000]
+        text = " ".join(p.get_text(strip=True) for p in paragraphs if len(p.get_text(strip=True)) > 20)
+        return text[:MAX_SCRAPE_CHARS]
     except Exception as e:
-        logger.error(f"Scraping error for {url}: {e}")
+        logger.error(f"Scrape error {url}: {e}")
         return ""
