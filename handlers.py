@@ -7,7 +7,7 @@ from database import get_category_weights, update_category_weight, mark_articles
 from fetcher import get_all_articles
 from scraper import scrape_article_text
 from summarizer import rank_articles, summarize_text
-from config import MAX_ARTICLES_PER_BATCH
+from config import MAX_ARTICLES_PER_BATCH, GUARANTEED_CATEGORIES
 
 # Pre-compiled regex for MarkdownV2 escaping
 _MD_ESCAPE = re.compile(r'([_*\[\]()~`>#\+\-=|{}.!])')
@@ -42,8 +42,21 @@ async def news(update: Update, context: ContextTypes.DEFAULT_TYPE):
     weights = get_category_weights()
     ranked = rank_articles(articles, weights)
 
-    # 3. Take top N
-    top = ranked[:MAX_ARTICLES_PER_BATCH]
+    # 3. Reserve guaranteed category slots, then fill remaining with ranked articles
+    top = []
+    used_urls = set()
+    for cat, max_count in GUARANTEED_CATEGORIES.items():
+        cat_articles = [a for a in ranked if a['category'] == cat][:max_count]
+        for a in cat_articles:
+            top.append(a)
+            used_urls.add(a['url'])
+
+    remaining_slots = MAX_ARTICLES_PER_BATCH - len(top)
+    for a in ranked:
+        if a['url'] not in used_urls:
+            top.append(a)
+            if len(top) >= MAX_ARTICLES_PER_BATCH:
+                break
     await status.edit_text(f"📝 Summarizing top {len(top)} articles...")
 
     # 4. Mark all as seen in one batch
@@ -89,9 +102,11 @@ async def news(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Show weights summary
     weights = get_category_weights()
     lines = ["📊 *Category Priorities:*\n"]
+    cats_shown = {a['category'] for a in top}
     for cat, w in sorted(weights.items(), key=lambda x: x[1], reverse=True):
-        if cat in {a['category'] for a in top}:
-            lines.append(f"• {_escape_md(cat)}: `{w:.1f}`")
+        marker = " 🇦🇱" if cat in GUARANTEED_CATEGORIES else ""
+        if cat in cats_shown:
+            lines.append(f"• {_escape_md(cat)}: `{w:.1f}`{marker}")
     await update.message.reply_text("\n".join(lines), parse_mode='MarkdownV2')
 
     # Periodic DB cleanup

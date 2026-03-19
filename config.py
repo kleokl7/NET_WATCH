@@ -63,6 +63,12 @@ CATEGORIES = {
     ],
 }
 
+# Categories that always get slots regardless of market-impact score.
+# These are ranked by relevance within their own category, not market impact.
+GUARANTEED_CATEGORIES = {
+    'Albania': 3,  # Always deliver up to 3 Albanian articles
+}
+
 # Finnhub API settings (requires FINNHUB_API_KEY in .env)
 FINNHUB_CATEGORIES = ['general', 'forex', 'merger']
 FINNHUB_MAX_ARTICLES = 10

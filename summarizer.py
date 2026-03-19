@@ -3,7 +3,7 @@
 import json
 import logging
 import google.generativeai as genai
-from config import GEMINI_MODEL
+from config import GEMINI_MODEL, GUARANTEED_CATEGORIES
 
 logger = logging.getLogger(__name__)
 
@@ -32,13 +32,17 @@ def rank_articles(articles, weights):
     headline_block = "\n".join(lines)
 
     prompt = (
-        "You are a financial news editor. Rate each headline below for market impact "
-        "on a scale of 1-10 where:\n"
-        "10 = major market mover (central bank rate decision, war, trade policy shift, "
-        "major earnings miss/beat, regulatory action on large cap)\n"
-        "7-9 = significant (sector-moving, geopolitical escalation, macro data surprise)\n"
-        "4-6 = moderate (industry news, mid-cap earnings, policy proposals)\n"
-        "1-3 = low impact (opinion pieces, minor updates, human interest)\n\n"
+        "You are a news editor. Rate each headline below on a scale of 1-10.\n\n"
+        "For MARKET/FINANCIAL headlines, rate by market impact:\n"
+        "10 = major market mover (rate decision, war, trade policy, large cap earnings)\n"
+        "7-9 = significant (sector-moving, geopolitical escalation, macro surprise)\n"
+        "4-6 = moderate (industry news, policy proposals)\n"
+        "1-3 = low (opinion, minor updates)\n\n"
+        "For ALBANIA headlines, rate by political/social importance to Albanians:\n"
+        "10 = major (elections, government changes, EU accession, major policy)\n"
+        "7-9 = significant (legislation, diplomacy, major protests, corruption cases)\n"
+        "4-6 = moderate (local politics, economic reports)\n"
+        "1-3 = low (minor local news, celebrity, sports)\n\n"
         "Respond ONLY with a JSON array of integers in the same order. "
         "Example for 3 headlines: [7, 3, 9]\n\n"
         f"{headline_block}"
