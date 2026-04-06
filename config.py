@@ -27,17 +27,17 @@ CATEGORIES = {
         'https://feeds.bloomberg.com/markets/news.rss',
         'https://www.cnbc.com/id/100003114/device/rss/rss.html',   # CNBC Top News
         'https://www.cnbc.com/id/10000664/device/rss/rss.html',    # CNBC Markets
-        'https://feeds.marketwatch.com/marketwatch/topstories/',    # MarketWatch Top Stories
+        'https://feeds.content.dowjones.io/public/rss/mw_topstories',  # MarketWatch Top Stories
+        'https://feeds.content.dowjones.io/public/rss/RSSMarketsMain',  # WSJ Markets
         'https://rss.nytimes.com/services/xml/rss/nyt/Business.xml',  # NYT Business
-        'https://feeds.finance.yahoo.com/rss/2.0/headline?s=^GSPC&region=US&lang=en-US',  # Yahoo Finance S&P
     ],
     'Macro & Central Banks': [
         'https://www.federalreserve.gov/feeds/press_all.xml',      # Fed all press releases
         'https://www.ecb.europa.eu/rss/press.html',                # ECB press releases
         'https://www.cnbc.com/id/20910258/device/rss/rss.html',    # CNBC Economy
         'https://www.imf.org/en/News/Rss?language=eng',            # IMF News
-        'https://www.boj.or.jp/en/rss/whatsnew.xml',               # Bank of Japan
-        'https://www.bankofengland.co.uk/rss/news',                # Bank of England
+        'https://www.bis.org/rss/cbspeeches.rss',                 # BIS central bank speeches
+        'https://www.bis.org/rss/press.rss',                       # BIS press releases
     ],
     'Regulatory & Filings': [
         'https://www.sec.gov/news/pressreleases.rss',              # SEC press releases
@@ -50,35 +50,36 @@ CATEGORIES = {
         'https://rsshub.app/apnews/topics/ap-top-news',           # AP News via RSSHub
         'https://asiatimes.com/feed/',                              # Asia-Pacific geopolitics
         'https://www.aljazeera.com/xml/rss/all.xml',              # Al Jazeera
-        'https://rss.dw.com/rdf/rss-en-all',                      # Deutsche Welle
-        'https://www.reutersagency.com/feed/',                     # Reuters Agency
+        'https://feeds.content.dowjones.io/public/rss/RSSWorldNews',  # WSJ World News
+        'https://feeds.npr.org/1004/rss.xml',                     # NPR World
     ],
     'EU & Europe': [
         'https://www.politico.eu/feed/',
         'https://www.consilium.europa.eu/en/press/press-releases/rss',  # EU Council
         'https://www.euractiv.com/feed/',                          # EurActiv
-        'https://www.euronews.com/rss',                            # Euronews
-        'https://ec.europa.eu/eurostat/web/rss/notifications.rss', # Eurostat data releases
+        'https://euobserver.com/rss.xml',                          # EUobserver
+        'https://www.europarl.europa.eu/rss/doc/top-stories/en.xml',  # EU Parliament
     ],
     'Commodities': [
         'https://oilprice.com/rss/main',
-        'https://www.kitco.com/feed/rss/news/',                    # Kitco (gold & precious metals)
+        'https://www.kitco.com/news/category/mining/rss',           # Kitco (gold & precious metals)
         'https://www.mining.com/feed/',                             # Mining.com
     ],
     'AI': [
         'https://openai.com/news/rss.xml',
-        'https://www.anthropic.com/feed.xml',                      # Anthropic
         'https://deepmind.google/blog/rss.xml',                    # Google DeepMind
+        'https://blog.research.google/feeds/posts/default',        # Google AI Blog
         'https://techcrunch.com/category/artificial-intelligence/feed/',  # TechCrunch AI
         'https://www.technologyreview.com/feed/',                  # MIT Technology Review
-        'https://feeds.arstechnica.com/arstechnica/index',         # Ars Technica
+        'https://www.wired.com/feed/rss',                          # Wired
     ],
     'Crypto': [
         'https://cointelegraph.com/rss',
         'https://www.coindesk.com/arc/outboundfeeds/rss/',
         'https://decrypt.co/feed',                                 # Decrypt
-        'https://cryptoslate.com/feed/',                            # CryptoSlate
         'https://www.theblock.co/rss.xml',                         # The Block
+        'https://blockworks.co/feed',                              # Blockworks
+        'https://bitcoinmagazine.com/feed',                        # Bitcoin Magazine
     ],
     'Albania': [
         'https://exit.al/en/feed/',
