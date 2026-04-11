@@ -4,13 +4,15 @@ import re
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from database import get_category_weights, update_category_weight, mark_articles_seen, cleanup_old_articles
-from fetcher import get_all_articles
+from fetcher import get_all_articles, get_feed_health
 from scraper import scrape_article_text
 from summarizer import rank_articles, summarize_text
-from config import MAX_ARTICLES_PER_BATCH, GUARANTEED_CATEGORIES
+from config import MAX_ARTICLES_PER_BATCH, GUARANTEED_CATEGORIES, RANK_BUFFER_MULTIPLIER
 
 # Pre-compiled regex for MarkdownV2 escaping
 _MD_ESCAPE = re.compile(r'([_*\[\]()~`>#\+\-=|{}.!])')
+
+_DEAD_SUMMARIES = {'Content too short or paywalled.', 'Summary unavailable.', ''}
 
 
 def _escape_md(text):
@@ -19,10 +21,11 @@ def _escape_md(text):
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "🟢 *NET\\_WATCH 8\\.0 ONLINE*\n\n"
+        "🟢 *NET\\_WATCH 9\\.0 ONLINE*\n\n"
         "AI\\-ranked news intelligence terminal\\.\n\n"
         "/news \\— fetch ranked briefing\n"
-        "/weights \\— view category priorities",
+        "/weights \\— view category priorities\n"
+        "/health \\— check feed status",
         parse_mode='MarkdownV2',
     )
 
@@ -33,7 +36,7 @@ async def news(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # 1. Fetch all articles concurrently
     articles = get_all_articles()
     if not articles:
-        await status.edit_text("No new articles found.")
+        await status.edit_text("No new articles found. Use /health to check feed status.")
         return
 
     await status.edit_text(f"🧠 Ranking {len(articles)} articles...")
@@ -42,33 +45,44 @@ async def news(update: Update, context: ContextTypes.DEFAULT_TYPE):
     weights = get_category_weights()
     ranked = rank_articles(articles, weights)
 
-    # 3. Reserve guaranteed category slots, then fill remaining with ranked articles
-    top = []
+    # 3. Reserve guaranteed category slots, then fill candidates from ranked list
+    #    Over-fetch by RANK_BUFFER_MULTIPLIER to have room for quality filtering.
+    candidates = []
     used_urls = set()
     for cat, max_count in GUARANTEED_CATEGORIES.items():
         cat_articles = [a for a in ranked if a['category'] == cat][:max_count]
         for a in cat_articles:
-            top.append(a)
+            candidates.append(a)
             used_urls.add(a['url'])
 
-    remaining_slots = MAX_ARTICLES_PER_BATCH - len(top)
+    max_candidates = MAX_ARTICLES_PER_BATCH * RANK_BUFFER_MULTIPLIER
     for a in ranked:
         if a['url'] not in used_urls:
-            top.append(a)
-            if len(top) >= MAX_ARTICLES_PER_BATCH:
+            candidates.append(a)
+            if len(candidates) >= max_candidates:
                 break
-    await status.edit_text(f"📝 Summarizing top {len(top)} articles...")
 
-    # 4. Mark all as seen in one batch
-    mark_articles_seen([a['url'] for a in top])
+    await status.edit_text(f"📝 Summarizing top articles...")
 
-    # 5. Scrape + summarize only the top articles
-    for article in top:
+    # 4. Scrape + summarize candidates, skip articles with dead content
+    delivered = []
+    delivered_urls = []
+    for article in candidates:
+        if len(delivered) >= MAX_ARTICLES_PER_BATCH:
+            break
+
         # Prefer RSS summary; scrape only if too short
         text = article.get('rss_summary', '')
         if len(text) < 80:
-            text = scrape_article_text(article['url'])
+            scraped = scrape_article_text(article['url'])
+            if scraped:
+                text = scraped
+
         summary = summarize_text(text)
+
+        # Quality gate: skip articles with no real content
+        if summary in _DEAD_SUMMARIES:
+            continue
 
         score_str = ""
         if 'ai_score' in article:
@@ -97,12 +111,23 @@ async def news(update: Update, context: ContextTypes.DEFAULT_TYPE):
             msg, parse_mode='MarkdownV2', reply_markup=InlineKeyboardMarkup(keyboard),
         )
 
+        delivered.append(article)
+        delivered_urls.append(article['url'])
+
+    # 5. Mark only successfully delivered articles as seen
+    if delivered_urls:
+        mark_articles_seen(delivered_urls)
+
     await status.delete()
+
+    if not delivered:
+        await update.message.reply_text("No articles with usable content found. Try again later or check /health.")
+        return
 
     # Show weights summary
     weights = get_category_weights()
     lines = ["📊 *Category Priorities:*\n"]
-    cats_shown = {a['category'] for a in top}
+    cats_shown = {a['category'] for a in delivered}
     for cat, w in sorted(weights.items(), key=lambda x: x[1], reverse=True):
         marker = " 🇦🇱" if cat in GUARANTEED_CATEGORIES else ""
         if cat in cats_shown:
@@ -111,6 +136,39 @@ async def news(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Periodic DB cleanup
     cleanup_old_articles()
+
+
+async def health(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show feed health status from the last fetch."""
+    report = get_feed_health()
+    if not report:
+        await update.message.reply_text("No feed data yet. Run /news first.")
+        return
+
+    ok_feeds = []
+    problem_feeds = []
+    for url, info in sorted(report.items(), key=lambda x: x[1]['category']):
+        short_url = url.split('/')[2] if '/' in url else url
+        cat = info['category']
+        if info['status'] == 'ok':
+            ok_feeds.append(f"✅ [{cat}] {short_url} ({info['articles']} articles)")
+        elif info['status'] == 'empty':
+            problem_feeds.append(f"⚠️ [{cat}] {short_url} — empty (0 articles)")
+        else:
+            problem_feeds.append(f"❌ [{cat}] {short_url} — {info['error']}")
+
+    lines = [f"📡 *Feed Health Report*\n"]
+    if problem_feeds:
+        lines.append(f"*Problems ({len(problem_feeds)}):*")
+        lines.extend(problem_feeds[:15])
+    lines.append(f"\n*Working ({len(ok_feeds)}):*")
+    lines.extend(ok_feeds[:20])
+
+    total = len(report)
+    working = len(ok_feeds)
+    lines.append(f"\n*Summary:* {working}/{total} feeds active")
+
+    await update.message.reply_text("\n".join(lines))
 
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):

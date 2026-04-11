@@ -1,16 +1,19 @@
 """NET_WATCH configuration — categories, feed URLs, constants."""
 
+import os
+
 # User-Agent for HTTP requests
 HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
-                  '(KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36 NetWatchBot/8.0'
+                  '(KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36'
 }
 
 # Gemini model for summarization and ranking
 GEMINI_MODEL = 'gemini-2.5-flash'
 
-# SQLite database file
-DB_FILE = 'netwatch_state.db'
+# SQLite database file — use DATA_DIR env var for Docker volume mount
+_data_dir = os.environ.get('DATA_DIR', '')
+DB_FILE = os.path.join(_data_dir, 'netwatch_state.db') if _data_dir else 'netwatch_state.db'
 
 # Max articles to pull per RSS feed
 MAX_ARTICLES_PER_FEED = 10
@@ -21,15 +24,21 @@ MAX_ARTICLES_PER_BATCH = 15
 # Max text sent to Gemini for summarization (tokens are proportional)
 MAX_SCRAPE_CHARS = 1500
 
+# How many extra articles to rank (buffer for quality-gate filtering)
+RANK_BUFFER_MULTIPLIER = 2
+
+# Webhook server port for n8n trigger
+WEBHOOK_PORT = int(os.environ.get('WEBHOOK_PORT', '8080'))
+
 # Feed sources per category
 CATEGORIES = {
     'Market News': [
-        'https://feeds.bloomberg.com/markets/news.rss',
         'https://www.cnbc.com/id/100003114/device/rss/rss.html',   # CNBC Top News
         'https://www.cnbc.com/id/10000664/device/rss/rss.html',    # CNBC Markets
         'https://feeds.content.dowjones.io/public/rss/mw_topstories',  # MarketWatch Top Stories
         'https://feeds.content.dowjones.io/public/rss/RSSMarketsMain',  # WSJ Markets
         'https://rss.nytimes.com/services/xml/rss/nyt/Business.xml',  # NYT Business
+        'https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=10001147',  # CNBC Finance
     ],
     'Macro & Central Banks': [
         'https://www.federalreserve.gov/feeds/press_all.xml',      # Fed all press releases
@@ -41,13 +50,14 @@ CATEGORIES = {
     ],
     'Regulatory & Filings': [
         'https://www.sec.gov/news/pressreleases.rss',              # SEC press releases
-        'https://efts.sec.gov/LATEST/search-index?q=%228-K%22&forms=8-K&dateRange=custom&startdt=2024-01-01',  # SEC 8-K filings
+        'https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&type=8-K&dateb=&owner=include&count=10&search_text=&action=getcompany&output=atom',  # SEC 8-K filings (Atom)
         'https://www.cftc.gov/Newsroom/PressReleases/rss.xml',     # CFTC press releases
-        'https://www.esma.europa.eu/press-news/esma-news?f%5B0%5D=news_category%3A72/feed',  # ESMA (EU securities regulator)
+        'https://www.esma.europa.eu/press-news/esma-news/feed',    # ESMA (EU securities regulator)
     ],
     'Geopolitics': [
         'https://feeds.bbci.co.uk/news/world/rss.xml',            # BBC World
         'https://rsshub.app/apnews/topics/ap-top-news',           # AP News via RSSHub
+        'https://feeds.skynews.com/feeds/rss/world.xml',          # Sky News World
         'https://asiatimes.com/feed/',                              # Asia-Pacific geopolitics
         'https://www.aljazeera.com/xml/rss/all.xml',              # Al Jazeera
         'https://feeds.content.dowjones.io/public/rss/RSSWorldNews',  # WSJ World News

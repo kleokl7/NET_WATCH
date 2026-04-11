@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+*.pyo
+.env
+*.db
+.git/
+.gitignore
+.claude/
+*.md
+Procfile
+railway.toml
+render.yaml
+n8n-workflow.json
