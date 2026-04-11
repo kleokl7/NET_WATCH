@@ -1,4 +1,4 @@
-"""NET_WATCH feed fetching — RSS + Finnhub API with concurrent fetching."""
+"""NET_WATCH feed fetching — RSS + Finnhub API with concurrent fetching and health tracking."""
 
 import logging
 from datetime import datetime, timedelta, timezone
@@ -27,10 +27,18 @@ _session.headers.update(HEADERS)
 # Finnhub API key
 _finnhub_key = None
 
+# Feed health tracking: {url: {"status": "ok"|"error"|"empty", "articles": int, "error": str}}
+_feed_health = {}
+
 
 def init_finnhub(api_key):
     global _finnhub_key
     _finnhub_key = api_key
+
+
+def get_feed_health():
+    """Return a copy of the feed health report."""
+    return dict(_feed_health)
 
 
 def _parse_date(entry):
@@ -73,7 +81,26 @@ def fetch_feed(url, category):
     articles = []
     cutoff = datetime.now(timezone.utc) - MAX_AGE
     try:
-        feed = feedparser.parse(url)
+        # Pre-fetch with requests to check HTTP status before feedparser
+        resp = _session.get(url, timeout=15)
+        if resp.status_code >= 400:
+            _feed_health[url] = {
+                'status': 'error', 'articles': 0, 'category': category,
+                'error': f'HTTP {resp.status_code}',
+            }
+            logger.warning(f"Feed HTTP {resp.status_code}: {url}")
+            return []
+
+        feed = feedparser.parse(resp.content)
+
+        if feed.bozo and not feed.entries:
+            _feed_health[url] = {
+                'status': 'error', 'articles': 0, 'category': category,
+                'error': f'Parse error: {feed.bozo_exception}',
+            }
+            logger.warning(f"Feed parse error {url}: {feed.bozo_exception}")
+            return []
+
         source_name = feed.feed.get('title', url.split('/')[2])
         feed_lang = (feed.feed.get('language', '') or '')[:2].lower()
 
@@ -86,15 +113,39 @@ def fetch_feed(url, category):
             if entry_lang and entry_lang not in ALLOWED_LANGS:
                 continue
 
+            title = getattr(entry, 'title', '')
+            link = getattr(entry, 'link', '')
+            if not title or not link:
+                continue
+
             articles.append({
-                'title': entry.title,
-                'url': entry.link,
+                'title': title,
+                'url': link,
                 'category': category,
                 'source': source_name,
                 'date': pub_date,
                 'rss_summary': _extract_rss_summary(entry),
             })
+
+        status = 'ok' if articles else 'empty'
+        _feed_health[url] = {
+            'status': status, 'articles': len(articles), 'category': category,
+            'error': None,
+        }
+        if not articles:
+            logger.info(f"Feed returned 0 articles: {url}")
+
+    except requests.exceptions.Timeout:
+        _feed_health[url] = {
+            'status': 'error', 'articles': 0, 'category': category,
+            'error': 'Timeout',
+        }
+        logger.warning(f"Feed timeout: {url}")
     except Exception as e:
+        _feed_health[url] = {
+            'status': 'error', 'articles': 0, 'category': category,
+            'error': str(e),
+        }
         logger.error(f"Feed error {url}: {e}")
     return articles
 
@@ -143,6 +194,9 @@ def _fetch_one(args):
 
 def get_all_articles():
     """Fetch all articles from all sources concurrently. Returns flat list, deduped."""
+    global _feed_health
+    _feed_health = {}
+
     # Build list of (url, category) tasks
     tasks = []
     for cat, sources in CATEGORIES.items():
@@ -173,5 +227,11 @@ def get_all_articles():
             local_seen.add(url)
             unique.append(article)
 
-    logger.info(f"Fetched {len(all_articles)} raw, {len(unique)} new articles")
+    # Log health summary
+    ok = sum(1 for h in _feed_health.values() if h['status'] == 'ok')
+    empty = sum(1 for h in _feed_health.values() if h['status'] == 'empty')
+    errors = sum(1 for h in _feed_health.values() if h['status'] == 'error')
+    logger.info(f"Feed health: {ok} ok, {empty} empty, {errors} errors | "
+                f"Fetched {len(all_articles)} raw, {len(unique)} new articles")
+
     return unique
